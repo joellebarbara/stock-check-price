@@ -1,6 +1,6 @@
 'use strict';
 const StockModel = require("../models").Stock;
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 const cors = require('cors');
 
 async function createStock(stock, like, ip) {

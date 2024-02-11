@@ -1,53 +1,59 @@
 'use strict';
 const StockModel = require("../models").Stock;
 import fetch from 'node-fetch';
+const cors = require('cors');
 
-async function createStock(stock, like, ip){
+async function createStock(stock, like, ip) {
   const newStock = new StockModel({
-    symbol : stock,
-    likes : like ? [ip] : [],
+    symbol: stock,
+    likes: like ? [ip] : [],
   });
   const savedNew = await newStock.save();
   return savedNew;
 }
 
 async function findStock(stock) {
-  return await StockModel.findOne({ symbol : stock}).exec();
+  return await StockModel.findOne({ symbol: stock }).exec();
 }
 
 async function saveStock(stock, like, ip) {
   let saved = {};
   const foundStock = await findStock(stock);
-  if(!foundStock){
+  if (!foundStock) {
     const createsaved = await createStock(stock, like, ip);
     saved = createsaved;
     return saved;
   } else {
-    if(like && foundStock.likes.indexOf(ip) == -1){
+    if (like && foundStock.likes.indexOf(ip) === -1) {
       foundStock.likes.push(ip);
     }
-    saved = await foundStock.save()
-    return saved
+    saved = await foundStock.save();
+    return saved;
   }
 }
 
 async function getStock(stock) {
-  const response = await fetch(
-    `https://stock-price-checker-proxy.freecodecamp.rocks/v1/stock/${stock}/quote`
-  );
-  const { symbol, latestPrice } = await response.json();
-  return { symbol, latestPrice };
+  try {
+    const response = await fetch(
+      `https://stock-price-checker-proxy.freecodecamp.rocks/v1/stock/${stock}/quote`
+    );
+    const { symbol, latestPrice } = await response.json();
+    return { symbol, latestPrice };
+  } catch (error) {
+    console.error('Error fetching stock data:', error);
+    throw new Error('Failed to fetch stock data');
+  }
 }
 
 module.exports = function (app) {
+  app.use(cors());
 
-  app.route('/api/stock-prices').get(async function (req, res){
+  app.route('/api/stock-prices').get(async function (req, res) {
+    try {
       const { stock, like } = req.query;
-      if(Array.isArray(stock)){
-        console.log("stock", stock);
-
+      if (Array.isArray(stock)) {
         const { symbol, latestPrice } = await getStock(stock[0]);
-        const { symbol : symbol2, latestPrice : latestPrice2 } = await getStock(
+        const { symbol: symbol2, latestPrice: latestPrice2 } = await getStock(
           stock[1]
         );
         const firststock = await saveStock(stock[0], like, req.ip);
@@ -62,7 +68,7 @@ module.exports = function (app) {
           stockData.push({
             stock: symbol,
             price: latestPrice,
-            rel_likes:firststock.likes.length - secondstock.likes.length,
+            rel_likes: firststock.likes.length - secondstock.likes.length,
           });
         }
 
@@ -77,26 +83,31 @@ module.exports = function (app) {
             rel_likes: secondstock.likes.length - firststock.likes.length,
           });
         }
+
         res.json({
           stockData,
         });
         return;
       }
+
       const { symbol, latestPrice } = await getStock(stock);
-      if(!symbol){
-        res.json({ stockData : { likes : like ? 1 : 0} });
+      if (!symbol) {
+        res.json({ stockData: { likes: like ? 1 : 0 } });
         return;
       }
 
       const oneStockData = await saveStock(symbol, like, req.ip);
-      console.log("one Stock Data - ", oneStockData);
 
       res.json({
-        stockData : {
-          stock : symbol,
-          price : latestPrice,
-          likes : oneStockData.likes.length,
+        stockData: {
+          stock: symbol,
+          price: latestPrice,
+          likes: oneStockData.likes.length,
         },
       });
-    });
-  };
+    } catch (error) {
+      console.error('Error in API route:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+};
